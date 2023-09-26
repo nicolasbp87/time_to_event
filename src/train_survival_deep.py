@@ -18,9 +18,52 @@ import plotly.io as pio
 pio.templates.default = "plotly_white"
 
 import itertools
-    
+
+# 1. Concordance Class:
+# This class serves as a callback to calculate and log the concordance index at the end of each epoch, which is a performance 
+# metric for survival models.
+
 class Concordance(tt.cb.MonitorMetrics):
+    """
+    This class is an extension of tt.cb.MonitorMetrics and is used for monitoring
+    Concordance metrics at the end of each epoch during training.
+    
+    Attributes
+    ----------
+    x : torch.Tensor
+        The input data tensor.
+    durations : array-like
+        The array containing the durations for each observation in the dataset.
+    events : array-like
+        The array containing the event occurrences for each observation in the dataset.
+    per_epoch : int, optional, default=1
+        The frequency with which the Concordance metric should be calculated.
+    discrete : bool, optional, default=False
+        Whether the survival predictions are discrete or not.
+    verbose : bool, optional, default=True
+        Whether to print Concordance metric at the end of each epoch.
+    """
+
     def __init__(self, x, durations, events, per_epoch=1, discrete=False, verbose=True):
+        """
+        Initializes the Concordance class with input data, durations, events, and other optional parameters.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            The input data tensor.
+        durations : array-like
+            Array containing the durations for each observation in the dataset.
+        events : array-like
+            Array containing the event occurrences for each observation in the dataset.
+        per_epoch : int, optional, default=1
+            The frequency with which the Concordance metric should be calculated.
+        discrete : bool, optional, default=False
+            Whether the survival predictions are discrete or not.
+        verbose : bool, optional, default=True
+            Whether to print Concordance metric at the end of each epoch.
+        """
+
         super().__init__(per_epoch)
         self.x = x
         self.durations = durations
@@ -29,6 +72,12 @@ class Concordance(tt.cb.MonitorMetrics):
         self.discrete = discrete
     
     def on_epoch_end(self):
+        """
+        This method is called at the end of each epoch and is used for calculating and
+        possibly printing the Concordance metric based on the current model, input data, 
+        durations, and events.
+        """
+
         super().on_epoch_end()
         if self.epoch % self.per_epoch == 0:
             if not(self.discrete):
@@ -44,19 +93,100 @@ class Concordance(tt.cb.MonitorMetrics):
             if self.verbose:
                 print('concordance:', round(concordance, 5))
 
+# 2. score_model Function:
+# Used to score a trained model using the concordance index.
 def score_model(model, data, durations, events, discrete=False):
+    """
+    Calculates and returns the Concordance metric for the given model and data.
+    
+    Parameters
+    ----------
+    model : object
+        The model object to be scored.
+    data : torch.Tensor
+        The input data tensor.
+    durations : array-like
+        Array containing the durations for each observation in the dataset.
+    events : array-like
+        Array containing the event occurrences for each observation in the dataset.
+    discrete : bool, optional, default=False
+        Whether the survival predictions are discrete or not.
+    
+    Returns
+    -------
+    float
+        The calculated Concordance metric for the given model and data.
+    """
+
     if not(discrete):
         surv = model.predict_surv_df(data)
     else:
         surv = model.interpolate(10).predict_surv_df(data)
     return EvalSurv(surv, durations, events, censor_surv='km').concordance_td()
-    
+
+# 3. train_deep_surv Function:
+# Generic training loop for deep survival models, allowing to train a model with the given parameters and datasets, 
+# and then it evaluates the model on training, validation and test subsets and prints out the training and falidation losses.
+
 def train_deep_surv(train, val, test, model_obj, out_features,
                     n_nodes, n_layers, dropout , lr =0.01, 
                     batch_size = 16, epochs = 500, output_bias=False,  
                     tolerance=10, 
                     model_params = {}, discrete= False,
                     print_lr=True, print_logs=True, verbose = True):
+    """
+    Trains a deep survival model on the provided training data and validates it 
+    on the provided validation data. Also evaluates the model on test data and 
+    returns training logs, the trained model, and scores on different datasets.
+    
+    Parameters
+    ----------
+    train : tuple
+        Tuple containing training data and labels.
+    val : tuple
+        Tuple containing validation data and labels.
+    test : tuple
+        Tuple containing test data and labels.
+    model_obj : object
+        The survival model object to be trained.
+    out_features : int
+        Number of output features in the model.
+    n_nodes : int
+        Number of nodes in each layer.
+    n_layers : int
+        Number of hidden layers.
+    dropout : float
+        The dropout rate.
+    lr : float, optional, default=0.01
+        Learning rate.
+    batch_size : int, optional, default=16
+        Batch size for training.
+    epochs : int, optional, default=500
+        Number of training epochs.
+    output_bias : bool, optional, default=False
+        Whether to include output bias in the model.
+    tolerance : int, optional, default=10
+        The tolerance for early stopping.
+    model_params : dict, optional, default={}
+        Additional model parameters.
+    discrete : bool, optional, default=False
+        Whether the survival predictions are discrete or not.
+    print_lr : bool, optional, default=True
+        Whether to print learning rate during training.
+    print_logs : bool, optional, default=True
+        Whether to print training logs.
+    verbose : bool, optional, default=True
+        Whether to print verbose logs.
+
+    Returns
+    -------
+    DataFrame
+        The training logs as a DataFrame.
+    object
+        The trained model object.
+    dict
+        A dictionary containing the Concordance metric scores on train, validation, and test datasets.
+    """
     
     in_features = train[0].shape[1]
     num_nodes = [n_nodes]*(n_layers)
@@ -96,7 +226,36 @@ def train_deep_surv(train, val, test, model_obj, out_features,
         
     return logs_df, model, scores
 
+# 4. grid_search_deep Function:
+# Performs agrid search over a predefined parameter space and returns the best model and a Dataframe with the results 
+# of the different configurations.
 def grid_search_deep(train, val, test, out_features, grid_params, model_obj):
+    """
+    Performs grid search on the provided grid parameters and returns the best model 
+    along with the results table.
+    
+    Parameters
+    ----------
+    train : tuple
+        Tuple containing training data and labels.
+    val : tuple
+        Tuple containing validation data and labels.
+    test : tuple
+        Tuple containing test data and labels.
+    out_features : int
+        Number of output features in the model.
+    grid_params : dict
+        Dictionary containing grid parameters for grid search.
+    model_obj : object
+        The survival model object to be trained.
+    
+    Returns
+    -------
+    object
+        The best model object obtained from grid search.
+    DataFrame
+        The results table as a DataFrame containing scores and parameters for each combination in the grid search.
+    """
     best_score = -100
     
     n = 1
@@ -141,8 +300,33 @@ def grid_search_deep(train, val, test, out_features, grid_params, model_obj):
     
     return best_model, table.sort_values(by="score_test", ascending=False).reset_index(drop=True)
 
-
+# 5. load_model Function:
+# Loads a previously trained model from disk, allowing for resuming training or performing evaluations without retraining the model.
 def load_model(filename, path, model_obj, in_features, out_features, params):
+    """
+    Loads a pre-trained model from the specified path and filename, 
+    and returns the loaded model object.
+    
+    Parameters
+    ----------
+    filename : str
+        The name of the file from which the model is to be loaded.
+    path : str
+        The path of the directory containing the model file.
+    model_obj : object
+        The survival model object to be loaded.
+    in_features : int
+        Number of input features in the model.
+    out_features : int
+        Number of output features in the model.
+    params : dict
+        Dictionary containing parameters to initialize the model object.
+    
+    Returns
+    -------
+    object
+        The loaded model object.
+    """
     num_nodes = [int(params["n_nodes"])] * (int(params["n_layers"]))
     del params["n_nodes"]
     del params["n_layers"]

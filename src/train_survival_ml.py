@@ -18,6 +18,14 @@ import itertools
     
     
 def plot_feat_imp(cols, coef):
+    """
+    Plots the feature importances in a bar graph.
+    
+    :param cols: list, Names of the features.
+    :param coef: array-like, Coefficients corresponding to the features.
+    :return: DataFrame, A DataFrame containing the features and their importance.
+             Figure, A Plotly figure object representing the bar graph.
+    """
     feat_importance = pd.DataFrame({
         "feature": cols,
         "coef": coef
@@ -37,7 +45,18 @@ def plot_feat_imp(cols, coef):
     return feat_importance, fig
     
 def get_bier_score(df, y_train, y_test, survs, times, col_target = "duration", with_benchmark=True):
+    """
+    Calculates the Brier score for the given survival predictions.
     
+    :param df: DataFrame, The input dataset.
+    :param y_train: array-like, The training labels.
+    :param y_test: array-like, The testing labels.
+    :param survs: array-like, Survival functions for predictions.
+    :param times: array-like, The times at which to calculate the Brier score.
+    :param col_target: str, The column name for the duration target variable. Default is "duration".
+    :param with_benchmark: bool, Whether to include benchmark models. Default is True.
+    :return: dict, A dictionary containing Brier scores for different models.
+    """
     if with_benchmark:
     
         km_func = StepFunction(
@@ -61,6 +80,15 @@ def get_bier_score(df, y_train, y_test, survs, times, col_target = "duration", w
 
 
 def get_bier_curve(y_train, y_test, survs, times):
+    """
+    Calculates the Brier score curve over different times.
+    
+    :param y_train: array-like, The training labels.
+    :param y_test: array-like, The testing labels.
+    :param survs: array-like, Survival functions for predictions.
+    :param times: array-like, The times at which to calculate the Brier score.
+    :return: list, A list containing Brier scores at different times.
+    """
     preds = {'estimator': np.row_stack([fn(times) for fn in survs])}
 
     scores = []
@@ -73,6 +101,18 @@ def get_bier_curve(y_train, y_test, survs, times):
     
 
 def fit_score(estimator, Xy, train_index, test_index, cols, col_target):
+    """
+    Fits the model on training data and scores it on test data.
+    
+    :param estimator: object, The estimator object implementing ‘fit’ and ‘score’.
+    :param Xy: DataFrame, The input dataset.
+    :param train_index: array-like, Indices of training samples.
+    :param test_index: array-like, Indices of testing samples.
+    :param cols: list, Names of the features.
+    :param col_target: str, The column name for the duration target variable.
+    :return: object, The fitted estimator object.
+             float, The score of the estimator on the test data.
+    """
     Xy_train = Xy.loc[train_index]
     Xy_test = Xy.loc[test_index]
 
@@ -92,7 +132,20 @@ def fit_score(estimator, Xy, train_index, test_index, cols, col_target):
 
 
 def cv_fit_score(df, cv, estimator_fn, cols, col_target, params, drop_zero = True, verbose = False):
+    """
+    Performs cross-validation, fitting the model on different folds, and returns the scores for each fold.
     
+    :param df: DataFrame, The input dataset.
+    :param cv: cross-validation generator, Determines the cross-validation splitting strategy.
+    :param estimator_fn: function, A function that returns an estimator object.
+    :param cols: list, Names of the features.
+    :param col_target: str, The column name for the duration target variable.
+    :param params: dict, Parameters to pass to the estimator.
+    :param drop_zero: bool, Whether to drop rows where the target variable is zero. Default is True.
+    :param verbose: bool, Whether to print messages while running. Default is False.
+    :return: object, The estimator object.
+             dict, A dictionary containing cross-validation scores.
+    """
     Xy = df[cols+["censored", col_target]].dropna().reset_index(drop=True)
     
     if drop_zero:
@@ -122,7 +175,19 @@ def cv_fit_score(df, cv, estimator_fn, cols, col_target, params, drop_zero = Tru
 
 
 def grid_search(grid_params, df, cv, estimator_fn, cols, col_target, verbose = False):
+    """
+    Performs grid search over a range of parameters to find the best estimator.
     
+    :param grid_params: dict, Dictionary with parameters names (str) as keys and lists of parameter settings to try as values.
+    :param df: DataFrame, The input dataset.
+    :param cv: cross-validation generator, Determines the cross-validation splitting strategy.
+    :param estimator_fn: function, A function that returns an estimator object.
+    :param cols: list, Names of the features.
+    :param col_target: str, The column name for the duration target variable.
+    :param verbose: bool, Whether to print messages while running. Default is False.
+    :return: object, The best estimator object after grid search.
+             DataFrame, A DataFrame containing the results of the grid search.
+    """
     best_score = -100
     
     n = 1
